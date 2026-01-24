@@ -25,8 +25,15 @@ export class AuthManager {
      * @returns {string|null} CSRF token if found
      */
     static extractCsrfToken(htmlContent) {
-        const match = htmlContent.match(/name="_csrf"\s+value="([^"]+)"/);
-        return match ? match[1] : null;
+        // Try standard patterns with more flexibility
+        let match = htmlContent.match(/name=["']_csrf["']\s+value=["']([^"']+)["']/);
+        if (match) return match[1];
+
+        // Try alternative order (value first)
+        match = htmlContent.match(/value=["']([^"']+)["']\s+name=["']_csrf["']/);
+        if (match) return match[1];
+
+        return null;
     }
 
     /**
@@ -37,9 +44,21 @@ export class AuthManager {
     updateCsrfToken(htmlContent) {
         const newCsrf = AuthManager.extractCsrfToken(htmlContent);
         if (newCsrf) {
+            console.log('[Auth] CSRF Token found:', newCsrf.substring(0, 10) + '...');
             this.csrfToken = newCsrf;
             return true;
         }
+
+        // Debug: check if csrf exists but wasn't matched
+        if (htmlContent.includes('_csrf')) {
+            console.log('[Auth] "_csrf" found in content but regex failed!');
+            // Locate the string context
+            const idx = htmlContent.indexOf('_csrf');
+            console.log('[Auth] Context:', htmlContent.substring(Math.max(0, idx - 50), Math.min(htmlContent.length, idx + 100)));
+        } else {
+            console.log('[Auth] "_csrf" NOT found in content.');
+        }
+
         return false;
     }
 
@@ -58,8 +77,25 @@ export class AuthManager {
         console.log('Fetching login page...');
         const { code, url, content } = await this.httpClient.get(this.loginUrl);
 
+        console.log(`[Auth] fetched login page code: ${code}, url: ${url}`);
+
+        // Check if we were redirected to the index/home page (already logged in)
+        if (url && (url.includes('/index') || url.includes('/home') || url.includes('schoolapp.ensam-umi.ac.ma/$'))) {
+            console.log('[Auth] Redirected to index - User already logged in.');
+            this.loggedIn = true;
+            return true;
+        }
+
+        if (content) console.log(`[Auth] Content available, length: ${content.length}`);
+
         if (!content || !this.updateCsrfToken(content)) {
             console.error('Failed to fetch login page or retrieve CSRF token.');
+            if (content) {
+                console.log('Content dump (2000 chars):', content.substring(0, 2000));
+                console.log('Contains "form"?', content.includes('<form'));
+                console.log('Contains "input"?', content.includes('<input'));
+                console.log('Contains "Sign In"?', content.includes('Sign In') || content.includes('Se connecter'));
+            }
             return false;
         }
 

@@ -1,7 +1,7 @@
 /**
  * Parser for module grades HTML content
  */
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio-without-node-native';
 
 /**
  * Parse HTML content containing module grades

@@ -61,6 +61,9 @@ export class HTTPClient {
 
             try {
                 response = await this.client.request(config);
+                console.log(`[HTTP] ${method} ${absoluteUrl} - Status: ${response.status}`);
+                if (response.data) console.log(`[HTTP] Response length: ${response.data.length}`);
+                if (response.data && typeof response.data === 'string') console.log(`[HTTP] Preview: ${response.data.substring(0, 100)}...`);
 
                 // Store cookies from response
                 const setCookieHeader = response.headers['set-cookie'];

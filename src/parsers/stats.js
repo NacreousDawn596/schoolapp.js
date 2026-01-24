@@ -1,7 +1,7 @@
 /**
  * Parser for statistics HTML content
  */
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio-without-node-native';
 
 /**
  * Extract statistics from modal/popup HTML content

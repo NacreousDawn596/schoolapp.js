@@ -1,7 +1,7 @@
 /**
  * Parser for academic programs (filieres) HTML content
  */
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio-without-node-native';
 
 /**
  * Parse HTML content containing a table of academic programs and return structured data

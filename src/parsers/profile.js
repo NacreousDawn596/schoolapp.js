@@ -1,7 +1,7 @@
 /**
  * Parser for user profile HTML content
  */
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio-without-node-native';
 
 /**
  * Parse HTML content containing user profile and return detailed user data

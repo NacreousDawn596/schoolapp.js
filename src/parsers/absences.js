@@ -1,7 +1,7 @@
 /**
  * Parser for absences HTML content
  */
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio-without-node-native';
 
 /**
  * Parse HTML content containing absence details
