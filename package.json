@@ -1,5 +1,5 @@
 {
-  "name": "schoolapp.js",
+  "name": "schoolapp",
   "version": "2.0.0",
   "description": "A JavaScript library for interacting with the SchoolApp platform - clean, object-oriented access to grades, attendance, and profile data",
   "main": "index.js",

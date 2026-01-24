@@ -13,7 +13,7 @@ Browsing the SchoolApp web interface manually for updates is slow. If you want t
 ## Installation
 
 ```bash
-npm install schoolapp.js
+npm install schoolapp
 ```
 
 Or if you're working locally:
@@ -30,7 +30,7 @@ npm install
 Getting your data is as simple as this:
 
 ```javascript
-import { SchoolAppClient } from 'schoolapp.js';
+import { SchoolAppClient } from 'schoolapp';
 
 // Initialize and log in
 const client = new SchoolAppClient();
@@ -53,7 +53,7 @@ if (await client.login("your.email@example.com", "password")) {
 The library is organized into several specific managers, so you always know where to find what you need:
 
 ```javascript
-import { SchoolAppClient } from 'schoolapp.js';
+import { SchoolAppClient } from 'schoolapp';
 
 const client = new SchoolAppClient();
 await client.login("email@example.com", "password");
