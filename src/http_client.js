@@ -21,8 +21,14 @@ export class HTTPClient {
         this.client = axios.create({
             headers: { ...DEFAULT_HEADERS },
             maxRedirects: 0,
+            timeout: 15000, // 15s timeout for ENSAM server
             validateStatus: (status) => status < 500 // Accept 3xx and 4xx
         });
+        this.onUnauthorized = null;
+    }
+
+    setUnauthorizedHandler(handler) {
+        this.onUnauthorized = handler;
     }
 
     /**
@@ -85,6 +91,7 @@ export class HTTPClient {
                     const location = response.headers.location;
                     // Resolve relative redirect
                     currentUrl = new URL(location, absoluteUrl).toString();
+                    console.log(`[HTTP] Redirecting to: ${currentUrl} (${response.status})`);
 
                     // Switch to GET for 301, 302, 303
                     if ([301, 302, 303].includes(response.status)) {
@@ -93,6 +100,17 @@ export class HTTPClient {
                         if (headers['Content-Type']) delete headers['Content-Type'];
                     }
                     continue;
+                }
+
+                // POST-RESPONSE DATA CHECK
+                // If we requested data but got a login page, we are likely unauthorized
+                if (response.data && typeof response.data === 'string' &&
+                    (response.data.includes('Sign In') || response.data.includes('login-box') || response.data.includes('name="_csrf"'))) {
+                    if (!absoluteUrl.includes('/login')) {
+                        console.warn(`[HTTP] Detected login page for protected resource ${absoluteUrl}. Session expired.`);
+                        response.isUnauthorized = true;
+                        if (this.onUnauthorized) this.onUnauthorized();
+                    }
                 }
 
                 // If not redirecting, break loop and return response

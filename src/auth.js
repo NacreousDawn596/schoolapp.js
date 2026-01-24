@@ -17,6 +17,14 @@ export class AuthManager {
         this.loginUrl = LOGIN_URL;
         this.csrfToken = null;
         this.loggedIn = false;
+
+        // Reset login state if HTTP client detects we are back at the login page
+        this.httpClient.setUnauthorizedHandler(() => {
+            if (this.loggedIn) {
+                console.warn('[AuthManager] HTTP Client signal: session lost.');
+                this.loggedIn = false;
+            }
+        });
     }
 
     /**
@@ -145,6 +153,13 @@ export class AuthManager {
      */
     isLoggedIn() {
         return this.loggedIn;
+    }
+
+    /**
+     * Explicitly set login state
+     */
+    setLoginState(state) {
+        this.loggedIn = state;
     }
 
     /**

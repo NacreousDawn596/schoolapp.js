@@ -8,21 +8,15 @@ async function main() {
     const client = new SchoolAppClient();
 
     // Login credentials
-    const email = "[EMAIL_ADDRESS]";
+    const email = "[EMAIL]";
     const password = "[PASSWORD]";
 
     if (await client.login(email, password)) {
         console.log("\n✓ Login successful!\n");
 
         // Get profile
-        const profile = await client.getProfile();
-        if (profile) {
-            console.log("Profile Information:");
-            console.log(`Name: ${profile.basic_info.full_name}`);
-            console.log(`Role: ${profile.basic_info.role}`);
-            console.log();
-        }
-
+        const profile = await client.getFilieres()
+        console.log(profile)
         // Get current element grades
         const currentGrades = await client.getCurrentElemNote();
         if (currentGrades && currentGrades.length > 0) {

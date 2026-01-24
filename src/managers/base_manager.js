@@ -40,7 +40,14 @@ export class BaseManager {
             return null;
         }
 
-        const { code, url: responseUrl, content } = await this.httpClient.get(url, params);
+        const response = await this.httpClient.get(url, params);
+        const { code, url: responseUrl, content } = response;
+
+        if (response.isUnauthorized) {
+            console.error(`[BaseManager] Unauthorized access to ${url}. Resetting login state.`);
+            this.auth.setLoginState(false);
+            return null;
+        }
 
         if (!content) {
             return null;
