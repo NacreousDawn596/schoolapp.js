@@ -21,6 +21,9 @@ export class SchoolAppClient {
     constructor(baseUrl = BASE_URL) {
         this.baseUrl = baseUrl;
         this.httpClient = new HTTPClient(this.baseUrl);
+        this.httpClient.setUnauthorizedHandler(() => {
+            this.auth?.handleUnauthorized?.();
+        });
         this.auth = new AuthManager(this.httpClient, this.baseUrl);
 
         // Initialize Managers
@@ -38,6 +41,15 @@ export class SchoolAppClient {
      */
     async login(email, password) {
         return await this.auth.login(email, password);
+    }
+
+    async logout() {
+        await this.httpClient.resetSession();
+        await this.auth.logout?.();
+    }
+
+    async resetSession() {
+        await this.httpClient.resetSession();
     }
 
     // ---------------------------------------------------------

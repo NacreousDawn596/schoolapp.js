@@ -1,5 +1,5 @@
 /**
- * Authentication and CSRF token management
+ * Authentication and CSRF token management (Node + Mobile safe)
  */
 import { LOGIN_URL } from './constants.js';
 
@@ -18,13 +18,23 @@ export class AuthManager {
         this.csrfToken = null;
         this.loggedIn = false;
 
-        // Reset login state if HTTP client detects we are back at the login page
+        // HARD reset on unauthorized - ensures cookies and auth state are always aligned
         this.httpClient.setUnauthorizedHandler(() => {
-            if (this.loggedIn) {
-                console.warn('[AuthManager] HTTP Client signal: session lost.');
-                this.loggedIn = false;
-            }
+            console.warn('[AuthManager] HTTP Client signal: session lost. Resetting auth state.');
+            this.resetAuthState();
         });
+    }
+
+    /* ------------------------------------------------------------------------ */
+    /*                              INTERNAL UTILS                               */
+    /* ------------------------------------------------------------------------ */
+
+    /**
+     * Reset all authentication state
+     */
+    resetAuthState() {
+        this.loggedIn = false;
+        this.csrfToken = null;
     }
 
     /**
@@ -33,6 +43,8 @@ export class AuthManager {
      * @returns {string|null} CSRF token if found
      */
     static extractCsrfToken(htmlContent) {
+        if (!htmlContent) return null;
+
         // Try standard patterns with more flexibility
         let match = htmlContent.match(/name=["']_csrf["']\s+value=["']([^"']+)["']/);
         if (match) return match[1];
@@ -58,17 +70,52 @@ export class AuthManager {
         }
 
         // Debug: check if csrf exists but wasn't matched
-        if (htmlContent.includes('_csrf')) {
+        if (htmlContent && htmlContent.includes('_csrf')) {
             console.log('[Auth] "_csrf" found in content but regex failed!');
             // Locate the string context
             const idx = htmlContent.indexOf('_csrf');
-            console.log('[Auth] Context:', htmlContent.substring(Math.max(0, idx - 50), Math.min(htmlContent.length, idx + 100)));
+            console.log('[Auth] Context:', htmlContent.substring(
+                Math.max(0, idx - 50), 
+                Math.min(htmlContent.length, idx + 100)
+            ));
         } else {
             console.log('[Auth] "_csrf" NOT found in content.');
         }
 
         return false;
     }
+
+    /* ------------------------------------------------------------------------ */
+    /*                              AUTH CHECK                                   */
+    /* ------------------------------------------------------------------------ */
+
+    /**
+     * Check if session is still valid WITHOUT logging in again
+     * Safe to call on app start / reconnect
+     * @returns {Promise<boolean>} True if session is valid
+     */
+    async checkSession() {
+        try {
+            const { code, url, content } = await this.httpClient.get(this.loginUrl);
+
+            // If redirected away from login page, session is valid
+            if (url && !url.includes('/login')) {
+                this.loggedIn = true;
+                return true;
+            }
+
+            // If we're still on login page, session is dead
+            this.resetAuthState();
+            return false;
+        } catch (error) {
+            console.warn('[Auth] Session check failed:', error.message);
+            return false;
+        }
+    }
+
+    /* ------------------------------------------------------------------------ */
+    /*                                  LOGIN                                    */
+    /* ------------------------------------------------------------------------ */
 
     /**
      * Login and maintain session
@@ -78,18 +125,18 @@ export class AuthManager {
      */
     async login(email, password) {
         if (this.loggedIn) {
-            console.log('Already logged in!');
+            console.log('[Auth] Already logged in!');
             return true;
         }
 
-        console.log('Fetching login page...');
+        console.log('[Auth] Fetching login page...');
         const { code, url, content } = await this.httpClient.get(this.loginUrl);
 
-        console.log(`[Auth] fetched login page code: ${code}, url: ${url}`);
+        console.log(`[Auth] Fetched login page code: ${code}, url: ${url}`);
 
-        // Check if we were redirected to the index/home page (already logged in)
-        if (url && (url.includes('/index') || url.includes('/home') || url.includes('schoolapp.ensam-umi.ac.ma/$'))) {
-            console.log('[Auth] Redirected to index - User already logged in.');
+        // Check if we were redirected away from login (already logged in via cookies)
+        if (url && !url.includes('/login')) {
+            console.log('[Auth] Already logged in (cookie-based).');
             this.loggedIn = true;
             return true;
         }
@@ -97,17 +144,17 @@ export class AuthManager {
         if (content) console.log(`[Auth] Content available, length: ${content.length}`);
 
         if (!content || !this.updateCsrfToken(content)) {
-            console.error('Failed to fetch login page or retrieve CSRF token.');
+            console.error('[Auth] Failed to fetch login page or retrieve CSRF token.');
             if (content) {
-                console.log('Content dump (2000 chars):', content.substring(0, 2000));
-                console.log('Contains "form"?', content.includes('<form'));
-                console.log('Contains "input"?', content.includes('<input'));
-                console.log('Contains "Sign In"?', content.includes('Sign In') || content.includes('Se connecter'));
+                console.log('[Auth] Content dump (2000 chars):', content.substring(0, 2000));
+                console.log('[Auth] Contains "form"?', content.includes('<form'));
+                console.log('[Auth] Contains "input"?', content.includes('<input'));
+                console.log('[Auth] Contains "Sign In"?', content.includes('Sign In') || content.includes('Se connecter'));
             }
             return false;
         }
 
-        console.log('Got CSRF token, logging in...');
+        console.log('[Auth] Got CSRF token, logging in...');
         const loginData = {
             '_csrf': this.csrfToken,
             'email': email,
@@ -121,31 +168,46 @@ export class AuthManager {
         );
 
         // Robust check: if we are still on the login page, it failed
-        // Check for specific login elements in the response content
-        const isLoginPage = response.content && (
-            response.content.includes('Sign In') ||
-            response.content.includes('name="email"') ||
-            response.content.includes('login-box')
-        );
+        const isLoginPage = response.url?.includes('/login') || 
+                           (response.content && (
+                               response.content.includes('Sign In') ||
+                               response.content.includes('name="email"') ||
+                               response.content.includes('login-box') ||
+                               response.content.includes('login')
+                           ));
 
         if (isLoginPage) {
-            console.error('Login failed! Still on login page.');
+            console.error('[Auth] Login failed! Still on login page.');
+            this.resetAuthState();
+            
             // Try to find an error message
-            if (response.content.includes('alert-danger')) {
-                console.error('Server returned error alert.');
+            if (response.content && response.content.includes('alert-danger')) {
+                console.error('[Auth] Server returned error alert.');
             }
             return false;
         }
 
-        if (response.url && response.url.includes('/login') && response.url.includes('error')) {
-            console.error('Login failed! Invalid credentials (url check).');
-            return false;
-        }
-
-        console.log('Login successful!');
+        console.log('[Auth] Login successful!');
         this.loggedIn = true;
         return true;
     }
+
+    /* ------------------------------------------------------------------------ */
+    /*                                  LOGOUT                                   */
+    /* ------------------------------------------------------------------------ */
+
+    /**
+     * Logout and reset session
+     * @returns {Promise<void>}
+     */
+    async logout() {
+        await this.httpClient.resetSession();
+        this.resetAuthState();
+    }
+
+    /* ------------------------------------------------------------------------ */
+    /*                                  STATE                                    */
+    /* ------------------------------------------------------------------------ */
 
     /**
      * Check if currently logged in
@@ -157,6 +219,7 @@ export class AuthManager {
 
     /**
      * Explicitly set login state
+     * @param {boolean} state - Login state
      */
     setLoginState(state) {
         this.loggedIn = state;
@@ -175,7 +238,7 @@ export class AuthManager {
             }
             return false;
         } catch (error) {
-            console.warn('CSRF refresh warning:', error.message);
+            console.warn('[Auth] CSRF refresh warning:', error.message);
             return false;
         }
     }
