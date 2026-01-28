@@ -176,15 +176,18 @@ export class HTTPClient {
 
       // Detect login page (session expired)
       if (
-        typeof response.data === "string" &&
-        !currentUrl.includes("/login") &&
-        (response.data.includes("Sign In") ||
-          response.data.includes("login-box") ||
-          response.data.includes('name="_csrf"'))
-      ) {
-        await this.resetSession();
-        if (this.onUnauthorized) this.onUnauthorized();
-      }
+            typeof response.data === "string" &&
+            !currentUrl.includes("/login") &&
+            (
+                response.data.includes("login-box") ||
+                response.data.includes('name="email"') ||
+                response.data.includes("Sign In")
+            )
+        ) {
+        if (this.onUnauthorized) {
+            this.onUnauthorized(); // suspicion only
+        }
+    }
 
       return response;
     }

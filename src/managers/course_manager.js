@@ -1,55 +1,49 @@
 /**
  * Manager for courses and study plans
  */
-import { BaseManager } from './base_manager.js';
-import { MODULES_URL } from '../constants.js';
-import * as parsers from '../parsers/index.js';
+import { BaseManager } from "./base_manager.js";
+import { MODULES_URL } from "../constants.js";
+import * as parsers from "../parsers/index.js";
 
-/**
- * Handles fetching of modules and study plans
- */
 export class CourseManager extends BaseManager {
-    /**
-     * Fetch modules for specific niveau/filiere/semestre
-     * @param {string} niveau - Academic level (e.g., "1A", "2A")
-     * @param {string} filiere - Program code (e.g., "API-MPT")
-     * @param {string} semestre - Semester (e.g., "S1", "S2")
-     * @param {boolean} refreshCsrf - Whether to refresh CSRF token before request
-     * @returns {Promise<Object|null>} Modules data object
-     */
-    async getModules(niveau, filiere, semestre, refreshCsrf = false) {
-        if (!this.ensureLoggedIn()) {
-            return null;
-        }
+  async getModules(niveau, filiere, semestre, refreshCsrf = false) {
+    // 🔒 Auth guard
+    this.ensureLoggedIn();
+    await this.guardAuth();
 
-        // Always GET modules page first to refresh CSRF token
-        console.log('Opening modules page to refresh state...');
-        const { code, url, content } = await this.httpClient.get(MODULES_URL);
+    /* ----------------------- OPEN MODULES PAGE ----------------------- */
 
-        if (!content) {
-            return null;
-        }
+    const page = await this.httpClient.get(MODULES_URL);
 
-        this.auth.updateCsrfToken(content);
-
-        if (refreshCsrf) {
-            await this.auth.refreshCsrfFromUrl(MODULES_URL);
-        }
-
-        console.log(`Fetching modules for ${niveau} ${filiere} ${semestre}...`);
-        const modulesData = {
-            '_csrf': this.auth.csrfToken,
-            'niveau': niveau,
-            'filiere': filiere,
-            'semestre': semestre
-        };
-
-        const response = await this.httpClient.post(
-            MODULES_URL,
-            modulesData,
-            MODULES_URL
-        );
-
-        return parsers.modules.parse(response.content);
+    if (!page?.content || typeof page.content !== "string") {
+      throw new Error("UNAUTHORIZED");
     }
+
+    this.auth.updateCsrfToken(page.content);
+
+    if (refreshCsrf) {
+      await this.auth.refreshCsrfFromUrl(MODULES_URL);
+    }
+
+    /* ----------------------- SUBMIT FORM ----------------------------- */
+
+    const payload = {
+      _csrf: this.auth.csrfToken,
+      niveau,
+      filiere,
+      semestre,
+    };
+
+    const response = await this.httpClient.post(
+      MODULES_URL,
+      payload,
+      MODULES_URL
+    );
+
+    if (!response?.content || typeof response.content !== "string") {
+      throw new Error("UNAUTHORIZED");
+    }
+
+    return parsers.modules.parse(response.content);
+  }
 }

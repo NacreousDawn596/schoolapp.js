@@ -21,10 +21,20 @@ export class BaseManager {
      */
     ensureLoggedIn() {
         if (!this.auth.isLoggedIn()) {
-            console.error('Not logged in! Call login() first.');
-            return false;
+            throw new Error("UNAUTHORIZED");
         }
-        return true;
+    }
+
+    /**
+     * Guard that confirms session loss if suspected
+     */
+    async guardAuth() {
+        if (this.auth.isAuthSuspect()) {
+            const lost = await this.auth.confirmSessionLoss();
+            if (lost) {
+                throw new Error("UNAUTHORIZED");
+            }
+        }
     }
 
     /**
@@ -36,9 +46,8 @@ export class BaseManager {
      * @returns {Promise<any>} Parsed data or null
      */
     async getJsonOrParse(url, parser, params = null, refreshCsrf = true) {
-        if (!this.ensureLoggedIn()) {
-            return null;
-        }
+        this.ensureLoggedIn();
+        await this.guardAuth();
 
         const response = await this.httpClient.get(url, params);
         const { code, url: responseUrl, content } = response;

@@ -1,10 +1,11 @@
 /**
  * Authentication and CSRF token management (Node + Mobile safe)
+ * Session only dies when server actually kills it
  */
 import { LOGIN_URL } from './constants.js';
 
 /**
- * Handles authentication and CSRF token management
+ * Handles authentication and CSRF token management with intelligent session suspicion
  */
 export class AuthManager {
     /**
@@ -18,10 +19,16 @@ export class AuthManager {
         this.csrfToken = null;
         this.loggedIn = false;
 
-        // HARD reset on unauthorized - ensures cookies and auth state are always aligned
+        // Internal auth suspicion tracking
+        this._authSuspect = false;
+        this._confirming = false;
+
+        // HTTP client may SUSPECT auth loss — never reset immediately
         this.httpClient.setUnauthorizedHandler(() => {
-            console.warn('[AuthManager] HTTP Client signal: session lost. Resetting auth state.');
-            this.resetAuthState();
+            if (!this._authSuspect) {
+                console.warn('[AuthManager] Unauthorized suspected (but not confirmed)');
+                this._authSuspect = true;
+            }
         });
     }
 
@@ -35,6 +42,7 @@ export class AuthManager {
     resetAuthState() {
         this.loggedIn = false;
         this.csrfToken = null;
+        this._authSuspect = false;
     }
 
     /**
@@ -78,7 +86,7 @@ export class AuthManager {
                 Math.max(0, idx - 50), 
                 Math.min(htmlContent.length, idx + 100)
             ));
-        } else {
+        } else if (htmlContent) {
             console.log('[Auth] "_csrf" NOT found in content.');
         }
 
@@ -86,7 +94,7 @@ export class AuthManager {
     }
 
     /* ------------------------------------------------------------------------ */
-    /*                              AUTH CHECK                                   */
+    /*                        SESSION CONFIRMATION                              */
     /* ------------------------------------------------------------------------ */
 
     /**
@@ -101,6 +109,7 @@ export class AuthManager {
             // If redirected away from login page, session is valid
             if (url && !url.includes('/login')) {
                 this.loggedIn = true;
+                this._authSuspect = false;
                 return true;
             }
 
@@ -110,6 +119,42 @@ export class AuthManager {
         } catch (error) {
             console.warn('[Auth] Session check failed:', error.message);
             return false;
+        }
+    }
+
+    /**
+     * Confirm whether the session is ACTUALLY lost.
+     * This is the ONLY place where auth state may be reset after suspicion.
+     * @returns {Promise<boolean>} True if session confirmed lost
+     */
+    async confirmSessionLoss() {
+        if (!this._authSuspect || this._confirming) {
+            return false;
+        }
+
+        this._confirming = true;
+
+        try {
+            const { code, url, content } = await this.httpClient.get(this.loginUrl);
+
+            // If we're on login page (not redirected), session is confirmed lost
+            if (url && url.includes('/login')) {
+                console.warn('[Auth] Session confirmed lost (redirected to /login)');
+                this.resetAuthState();
+                return true;
+            }
+
+            // False alarm — session still valid, cookies were accepted
+            console.log('[Auth] Session suspicion cleared — false alarm');
+            this.loggedIn = true;
+            this._authSuspect = false;
+            return false;
+
+        } catch (error) {
+            console.warn('[Auth] Session confirmation failed:', error.message);
+            return false;
+        } finally {
+            this._confirming = false;
         }
     }
 
@@ -138,6 +183,7 @@ export class AuthManager {
         if (url && !url.includes('/login')) {
             console.log('[Auth] Already logged in (cookie-based).');
             this.loggedIn = true;
+            this._authSuspect = false;
             return true;
         }
 
@@ -189,6 +235,7 @@ export class AuthManager {
 
         console.log('[Auth] Login successful!');
         this.loggedIn = true;
+        this._authSuspect = false;
         return true;
     }
 
@@ -218,11 +265,22 @@ export class AuthManager {
     }
 
     /**
-     * Explicitly set login state
+     * Check if authentication is suspected lost
+     * @returns {boolean} True if auth is suspected lost
+     */
+    isAuthSuspect() {
+        return this._authSuspect;
+    }
+
+    /**
+     * Explicitly set login state (use with caution)
      * @param {boolean} state - Login state
      */
     setLoginState(state) {
         this.loggedIn = state;
+        if (state) {
+            this._authSuspect = false;
+        }
     }
 
     /**
