@@ -1,14 +1,14 @@
 /**
  * Manager for attendance and sanctions
  */
-import { BaseManager } from './base_manager.js';
-import { ABSENCES_URL, SANCTIONS_URL } from '../constants.js';
-import * as parsers from '../parsers/index.js';
+const { BaseManager } = require('./base_manager.js');
+const { ABSENCES_URL, SANCTIONS_URL } = require('../constants.js');
+const parsers = require('../parsers/index.js');
 
 /**
  * Handles fetching of absences and sanctions
  */
-export class AttendanceManager extends BaseManager {
+class AttendanceManager extends BaseManager {
     /**
      * Get absences data
      * @returns {Promise<Object|null>} Absences object with summary and details
@@ -25,3 +25,5 @@ export class AttendanceManager extends BaseManager {
         return await this.getJsonOrParse(SANCTIONS_URL, parsers.sanctions);
     }
 }
+
+module.exports = { AttendanceManager };

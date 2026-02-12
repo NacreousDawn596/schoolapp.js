@@ -1,14 +1,14 @@
 /**
  * Parser for modules and elements HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing modules and their elements
  * @param {string} htmlContent - HTML content to parse
  * @returns {Object} Structured module data
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
     const modules = {};
 
@@ -70,3 +70,5 @@ export function parse(htmlContent) {
 
     return modules;
 }
+
+module.exports = { parse };

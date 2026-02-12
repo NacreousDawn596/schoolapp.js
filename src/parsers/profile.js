@@ -1,14 +1,14 @@
 /**
  * Parser for user profile HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing user profile and return detailed user data
  * @param {string} htmlContent - HTML content to parse
  * @returns {Object} Profile data object
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
 
     const result = {
@@ -129,3 +129,5 @@ export function parse(htmlContent) {
 
     return result;
 }
+
+module.exports = { parse };

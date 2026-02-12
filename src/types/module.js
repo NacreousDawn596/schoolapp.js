@@ -1,13 +1,13 @@
 /**
  * Module type representing a module (collection of elements) with grades
  */
-import { BaseType } from './base.js';
-import { MOD_STAT_URL } from '../constants.js';
+const { BaseType } = require('./base.js');
+const { MOD_STAT_URL } = require('../constants.js');
 
 /**
  * Represents a module (collection of elements) with grades
  */
-export class Module extends BaseType {
+class Module extends BaseType {
     /**
      * Fetch module statistics
      * @returns {Promise<Object|null>} Statistics object or null
@@ -35,3 +35,5 @@ export class Module extends BaseType {
         return this._stats.MOYMOD || await this.fetchStats();
     }
 }
+
+module.exports = { Module };

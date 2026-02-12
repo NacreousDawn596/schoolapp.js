@@ -1,7 +1,14 @@
 /**
  * Domain models for School App API
  */
-export { Annee } from './annee.js';
-export { Element } from './element.js';
-export { Module } from './module.js';
-export { Semestre } from './semestre.js';
+const { Annee } = require('./annee.js');
+const { Element } = require('./element.js');
+const { Module } = require('./module.js');
+const { Semestre } = require('./semestre.js');
+
+module.exports = {
+    Annee,
+    Element,
+    Module,
+    Semestre
+};

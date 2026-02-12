@@ -1,14 +1,14 @@
 /**
  * Parser for academic programs (filieres) HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing a table of academic programs and return structured data
  * @param {string} htmlContent - HTML content as a string
  * @returns {Array<Object>} List of program information objects
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
 
     // Find the table - using multiple selectors to be safe
@@ -71,3 +71,5 @@ export function parse(htmlContent) {
 
     return data;
 }
+
+module.exports = { parse };

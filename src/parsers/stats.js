@@ -1,14 +1,14 @@
 /**
  * Parser for statistics HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Extract statistics from modal/popup HTML content
  * @param {string} htmlContent - HTML content to parse
  * @returns {Object} Statistics object
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
     const expectedKeys = ["Votre note", "Moyenne promo", "Max", "Min", "Ecart type", "Effectif", "Votre classement"];
 
@@ -66,3 +66,5 @@ export function parse(htmlContent) {
 
     return {};
 }
+
+module.exports = { parse };

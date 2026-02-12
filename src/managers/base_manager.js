@@ -5,7 +5,7 @@
 /**
  * Base class for all managers
  */
-export class BaseManager {
+class BaseManager {
     /**
      * @param {import('../school_app_client.js').SchoolAppClient} client - Client instance
      */
@@ -69,3 +69,5 @@ export class BaseManager {
         return parser.parse(content);
     }
 }
+
+module.exports = { BaseManager };

@@ -1,14 +1,14 @@
 /**
  * Manager for student profile and programs
  */
-import { BaseManager } from './base_manager.js';
-import { INDEX_URL, FILIERES_URL } from '../constants.js';
-import * as parsers from '../parsers/index.js';
+const { BaseManager } = require('./base_manager.js');
+const { INDEX_URL, FILIERES_URL } = require('../constants.js');
+const parsers = require('../parsers/index.js');
 
 /**
  * Handles fetching of student profile and filieres
  */
-export class ProfileManager extends BaseManager {
+class ProfileManager extends BaseManager {
     /**
      * Get student profile data
      * @returns {Promise<Object|null>} Profile object with detailed user information
@@ -25,3 +25,5 @@ export class ProfileManager extends BaseManager {
         return await this.getJsonOrParse(FILIERES_URL, parsers.filieres);
     }
 }
+
+module.exports = { ProfileManager };

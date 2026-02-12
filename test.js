@@ -1,7 +1,7 @@
 /**
  * Comprehensive test suite for SchoolApp.js
  */
-import { SchoolAppClient } from './index.js';
+const { SchoolAppClient } = require('./index.js');
 
 console.log('🧪 SchoolApp.js Test Suite\n');
 console.log('='.repeat(50));
@@ -117,7 +117,7 @@ try {
 // Test 6: Type classes
 console.log('\n🏷️  Test 6: Type Classes');
 try {
-    const { Element, Module, Annee, Semestre } = await import('./src/types/index.js');
+    const { Element, Module, Annee, Semestre } = require('./src/types/index.js');
 
     if (Element && Module && Annee && Semestre) {
         console.log('   ✅ All type classes available');

@@ -1,13 +1,13 @@
 /**
  * Semestre (Semester) type representing a semester result
  */
-import { BaseType } from './base.js';
-import { SEM_STAT_URL } from '../constants.js';
+const { BaseType } = require('./base.js');
+const { SEM_STAT_URL } = require('../constants.js');
 
 /**
  * Represents a semester result
  */
-export class Semestre extends BaseType {
+class Semestre extends BaseType {
     /**
      * Fetch semester statistics
      * @returns {Promise<Object|null>} Statistics object or null
@@ -37,3 +37,5 @@ export class Semestre extends BaseType {
         return this._stats.MoySem || await this.fetchStats();
     }
 }
+
+module.exports = { Semestre };

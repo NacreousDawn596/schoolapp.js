@@ -1,14 +1,14 @@
 /**
  * Parser for annual academic results HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing annual averages
  * @param {string} htmlContent - HTML content to parse
  * @returns {Array<Object>} Array of annual result objects
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
     let table = $('.table.table-striped.table-sm').first();
     if (!table.length) {
@@ -58,3 +58,5 @@ export function parse(htmlContent) {
 
     return data;
 }
+
+module.exports = { parse };

@@ -1,13 +1,13 @@
 /**
  * Annee (Academic Year) type representing an academic year result
  */
-import { BaseType } from './base.js';
-import { ANNEE_STAT_URL } from '../constants.js';
+const { BaseType } = require('./base.js');
+const { ANNEE_STAT_URL } = require('../constants.js');
 
 /**
  * Represents an academic year result
  */
-export class Annee extends BaseType {
+class Annee extends BaseType {
     /**
      * Fetch year statistics
      * @returns {Promise<Object|null>} Statistics object or null
@@ -36,3 +36,5 @@ export class Annee extends BaseType {
         return this._stats.MoyAn || await this.fetchStats();
     }
 }
+
+module.exports = { Annee };

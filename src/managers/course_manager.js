@@ -1,11 +1,11 @@
 /**
  * Manager for courses and study plans
  */
-import { BaseManager } from "./base_manager.js";
-import { MODULES_URL } from "../constants.js";
-import * as parsers from "../parsers/index.js";
+const { BaseManager } = require("./base_manager.js");
+const { MODULES_URL } = require("../constants.js");
+const parsers = require("../parsers/index.js");
 
-export class CourseManager extends BaseManager {
+class CourseManager extends BaseManager {
   async getModules(niveau, filiere, semestre, refreshCsrf = false) {
     // 🔒 Auth guard
     this.ensureLoggedIn();
@@ -47,3 +47,5 @@ export class CourseManager extends BaseManager {
     return parsers.modules.parse(response.content);
   }
 }
+
+module.exports = { CourseManager };

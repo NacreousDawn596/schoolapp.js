@@ -1,14 +1,14 @@
 /**
  * Parser for absences HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing absence details
  * @param {string} htmlContent - HTML content to parse
  * @returns {Object} Absences data with summary and details
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
     const result = { summary: [], details: [] };
 
@@ -68,3 +68,5 @@ export function parse(htmlContent) {
 
     return result;
 }
+
+module.exports = { parse };

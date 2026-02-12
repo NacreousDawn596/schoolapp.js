@@ -1,13 +1,13 @@
 /**
  * Element type representing a module element (subject) with grades
  */
-import { BaseType } from './base.js';
-import { EVAL_STAT_URL } from '../constants.js';
+const { BaseType } = require('./base.js');
+const { EVAL_STAT_URL } = require('../constants.js');
 
 /**
  * Represents a module element (subject) with grades
  */
-export class Element extends BaseType {
+class Element extends BaseType {
     /**
      * Generic stat fetcher for element evaluations
      * @param {string} evalType - Evaluation type (NoteCC, NoteEX, NoteTP, MoyElem)
@@ -67,3 +67,5 @@ export class Element extends BaseType {
         return this._stats.MoyElem || await this.fetchStats("MoyElem");
     }
 }
+
+module.exports = { Element };

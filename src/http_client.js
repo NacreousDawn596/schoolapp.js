@@ -2,8 +2,8 @@
  * Universal HTTP Client (Node.js + React Native / Android)
  */
 
-import axios from "axios";
-import { DEFAULT_HEADERS } from "./constants.js";
+const axios = require("axios");
+const { DEFAULT_HEADERS } = require("./constants.js");
 
 /* -------------------------------------------------------------------------- */
 /*                               ENV DETECTION                                */
@@ -22,7 +22,7 @@ let CookieJarImpl = null;
 
 if (isNode) {
   // Node.js: use tough-cookie
-  const { CookieJar } = await import("tough-cookie");
+  const { CookieJar } = require("tough-cookie");
   CookieJarImpl = class {
     constructor() {
       this.jar = new CookieJar();
@@ -70,7 +70,7 @@ let isNetworkReady = null;
  * Inject from React Native:
  * setNetworkChecker(() => netInfo.isInternetReachable === true)
  */
-export function setNetworkChecker(fn) {
+function setNetworkChecker(fn) {
   isNetworkReady = fn;
 }
 
@@ -78,7 +78,7 @@ export function setNetworkChecker(fn) {
 /*                               HTTP CLIENT                                  */
 /* -------------------------------------------------------------------------- */
 
-export class HTTPClient {
+class HTTPClient {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
     this.cookieJar = new CookieJarImpl();
@@ -176,18 +176,18 @@ export class HTTPClient {
 
       // Detect login page (session expired)
       if (
-            typeof response.data === "string" &&
-            !currentUrl.includes("/login") &&
-            (
-                response.data.includes("login-box") ||
-                response.data.includes('name="email"') ||
-                response.data.includes("Sign In")
-            )
-        ) {
+        typeof response.data === "string" &&
+        !currentUrl.includes("/login") &&
+        (
+          response.data.includes("login-box") ||
+          response.data.includes('name="email"') ||
+          response.data.includes("Sign In")
+        )
+      ) {
         if (this.onUnauthorized) {
-            this.onUnauthorized(); // suspicion only
+          this.onUnauthorized(); // suspicion only
         }
-    }
+      }
 
       return response;
     }
@@ -254,3 +254,5 @@ export class HTTPClient {
     }
   }
 }
+
+module.exports = { setNetworkChecker, HTTPClient };

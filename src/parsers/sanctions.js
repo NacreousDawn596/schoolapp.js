@@ -1,14 +1,14 @@
 /**
  * Parser for sanctions HTML content
  */
-import cheerio from 'cheerio-without-node-native';
+const cheerio = require('cheerio-without-node-native');
 
 /**
  * Parse HTML content containing disciplinary sanctions
  * @param {string} htmlContent - HTML content to parse
  * @returns {Object} Sanctions data
  */
-export function parse(htmlContent) {
+function parse(htmlContent) {
     const $ = cheerio.load(htmlContent);
     const result = {
         Absences_non_justifiees: 0,
@@ -60,3 +60,5 @@ export function parse(htmlContent) {
 
     return result;
 }
+
+module.exports = { parse };

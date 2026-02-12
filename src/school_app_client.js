@@ -1,20 +1,20 @@
 /**
  * Professional client for interacting with the School App
  */
-import { HTTPClient } from './http_client.js';
-import { AuthManager } from './auth.js';
-import { BASE_URL } from './constants.js';
-import {
+const { HTTPClient } = require('./http_client.js');
+const { AuthManager } = require('./auth.js');
+const { BASE_URL } = require('./constants.js');
+const {
     GradesManager,
     AttendanceManager,
     ProfileManager,
     CourseManager
-} from './managers/index.js';
+} = require('./managers/index.js');
 
 /**
  * Main client for the School App API
  */
-export class SchoolAppClient {
+class SchoolAppClient {
     /**
      * @param {string} baseUrl - Base URL for the API (optional)
      */
@@ -148,3 +148,5 @@ export class SchoolAppClient {
         return await this.courses.getModules(niveau, filiere, semestre, refreshCsrf);
     }
 }
+
+module.exports = { SchoolAppClient };

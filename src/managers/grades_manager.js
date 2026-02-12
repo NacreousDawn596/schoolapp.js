@@ -1,18 +1,18 @@
 /**
  * Manager for grades and academic results
  */
-import { BaseManager } from './base_manager.js';
-import {
+const { BaseManager } = require('./base_manager.js');
+const {
     CURRENT_ELEM_URL, CURRENT_MOD_URL, ELEM_URL, MOD_URL,
     ANNEES_URL, SEMESTRES_URL
-} from '../constants.js';
-import * as parsers from '../parsers/index.js';
-import * as types from '../types/index.js';
+} = require('../constants.js');
+const parsers = require('../parsers/index.js');
+const types = require('../types/index.js');
 
 /**
  * Handles fetching of grades for elements, modules, years, and semesters
  */
-export class GradesManager extends BaseManager {
+class GradesManager extends BaseManager {
     /**
      * Get element notes (grades)
      * @param {boolean} current - If true, fetch only current semester
@@ -53,3 +53,5 @@ export class GradesManager extends BaseManager {
         return data ? data.map(item => new types.Semestre(this.client, item)) : [];
     }
 }
+
+module.exports = { GradesManager };

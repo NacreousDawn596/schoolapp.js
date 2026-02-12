@@ -5,7 +5,7 @@
 /**
  * Base class for all domain models with client access
  */
-export class BaseType {
+class BaseType {
     /**
      * @param {import('../school_app_client.js').SchoolAppClient} client - Client instance
      * @param {Object} data - Data object to initialize properties
@@ -57,7 +57,9 @@ export class BaseType {
         const { code, url: responseUrl, content } = await this.client.httpClient.get(url, params);
 
         // Dynamically import the stats parser
-        const { parse } = await import('../parsers/stats.js');
+        const { parse } = require('../parsers/stats.js');
         return parse(content);
     }
 }
+
+module.exports = { BaseType };
