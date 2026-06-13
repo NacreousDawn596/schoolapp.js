@@ -2,6 +2,8 @@
  * Base class for domain models
  */
 
+const { parse } = require('../parsers/stats.js');
+
 /**
  * Base class for all domain models with client access
  */
@@ -55,9 +57,6 @@ class BaseType {
         params._csrf = this.client.auth.csrfToken;
 
         const { code, url: responseUrl, content } = await this.client.httpClient.get(url, params);
-
-        // Dynamically import the stats parser
-        const { parse } = require('../parsers/stats.js');
         return parse(content);
     }
 }
