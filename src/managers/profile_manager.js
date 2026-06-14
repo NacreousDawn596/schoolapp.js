@@ -24,6 +24,10 @@ class ProfileManager extends BaseManager {
     async getFilieres() {
         return await this.getJsonOrParse(FILIERES_URL, parsers.filieres);
     }
+
+    async getPhoto(code) {
+        return await this.httpClient.get(`https://schoolapp.ensam-umi.ac.ma/getphoto/${code}`);
+    }
 }
 
 module.exports = { ProfileManager };

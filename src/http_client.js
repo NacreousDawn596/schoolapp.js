@@ -49,10 +49,28 @@ if (isNode) {
     }
     async set(url, cookie) {
       const host = new URL(url).origin;
-      const value = cookie.split(";")[0];
-      this.cookies[host] = this.cookies[host]
-        ? `${this.cookies[host]}; ${value}`
-        : value;
+      const [cookieContent] = cookie.split(";");
+      const [name, ...valueParts] = cookieContent.split("=");
+      const key = name.trim();
+      const value = valueParts.join("=").trim();
+
+      // Parse existing cookies into a map
+      const existingStr = this.cookies[host] || "";
+      const cookieMap = {};
+      
+      existingStr.split(";").forEach(c => {
+        if (!c.trim()) return;
+        const [cName, ...cValueParts] = c.split("=");
+        if (cName) cookieMap[cName.trim()] = cValueParts.join("=").trim();
+      });
+
+      // Update or add new cookie
+      cookieMap[key] = value;
+
+      // Reconstruct cookie string
+      this.cookies[host] = Object.entries(cookieMap)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("; ");
     }
     async clear() {
       this.cookies = {};
@@ -174,18 +192,17 @@ class HTTPClient {
         continue;
       }
 
-      // Detect login page (session expired)
+      // Optimized detection: check if response contains common login page markers
       if (
         typeof response.data === "string" &&
-        !currentUrl.includes("/login") &&
-        (
-          response.data.includes("login-box") ||
-          response.data.includes('name="email"') ||
-          response.data.includes("Sign In")
-        )
+        response.data.length < 50000 && // Assume huge pages (>50k) aren't simple login pages
+        !currentUrl.includes("/login")
       ) {
-        if (this.onUnauthorized) {
-          this.onUnauthorized(); // suspicion only
+        const data = response.data.toLowerCase();
+        if (data.includes("login-box") || data.includes('name="email"') || data.includes("sign in")) {
+          if (this.onUnauthorized) {
+            this.onUnauthorized();
+          }
         }
       }
 

@@ -147,6 +147,10 @@ class SchoolAppClient {
     async getModules(niveau, filiere, semestre, refreshCsrf = false) {
         return await this.courses.getModules(niveau, filiere, semestre, refreshCsrf);
     }
+
+    async getPhoto(code) {
+        return await this.profile.getPhoto(code);
+    }
 }
 
 module.exports = { SchoolAppClient };
