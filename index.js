@@ -6,13 +6,15 @@
  */
 
 const { SchoolAppClient } = require('./src/school_app_client.js');
-const { HTTPClient } = require('./src/http_client.js');
+const { HTTPClient, CookieJar, setNetworkChecker } = require('./src/http_client.js');
 const { AuthManager } = require('./src/auth.js');
 
 // Export main classes
 module.exports = {
     SchoolAppClient,
     HTTPClient,
+    CookieJar,
+    setNetworkChecker,
     AuthManager,
     VERSION: '2.2.0',
 };
