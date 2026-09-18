@@ -4,16 +4,29 @@ Documentation for the underlying infrastructure of the SchoolApp.js library.
 
 ## `HTTPClient`
 
-Handles all network requests and cookie management.
+Handles all network requests and cookie management. Built on the standard
+`fetch()` API (no Axios, no `http`/`https`, no `tough-cookie`), so it runs
+identically in Node.js, Cloudflare Workers, React Native, browsers, Bun, and
+Deno.
 
 ### Properties
 - **`baseUrl`**: The API base URL.
-- **`cookieJar`**: Instance of `tough-cookie` Store.
-- **`client`**: The `axios` instance.
+- **`cookieJar`**: Instance of the portable `CookieJar` (in-memory, per-origin).
+- **`timeout`**: Request timeout in milliseconds (default `15000`).
+- **`onUnauthorized`**: Optional callback invoked when a login page is detected.
 
 ### Methods
 - **`async get(url, params = null)`**: Performs a GET request.
-- **`async post(url, data, referer = null)`**: Performs a POST request.
+- **`async post(url, data, referer = null)`**: Performs a POST request
+  (`application/x-www-form-urlencoded`).
+- **`async resetSession()`**: Clears the cookie jar.
+- **`setUnauthorizedHandler(handler)`**: Sets the login-detection callback.
+
+## `CookieJar`
+
+A portable in-memory cookie store. Cookies are keyed by origin/domain and are
+only ever sent back to a matching origin. Exposes `get(url)`, `set(url, cookie)`,
+and `clear()`.
 
 ---
 

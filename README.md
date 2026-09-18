@@ -182,11 +182,13 @@ See the [examples](./examples) directory for complete working examples.
 
 ## Requirements
 
-- Node.js >= 14.0.0
+The HTTP client is built on the standard `fetch()` API and is runtime-agnostic:
+it works in Node.js (18+), Cloudflare Workers, React Native, browsers, Bun, and
+Deno without any HTTP-specific dependency.
+
+- A runtime with global `fetch()` support (Node.js >= 18.0.0)
 - Dependencies:
-  - `axios` - HTTP client
   - `cheerio` - HTML parsing
-  - `tough-cookie` - Cookie management
 
 ## License
 
