@@ -1,81 +1,258 @@
 /**
- * Universal HTTP Client (Node.js + React Native / Android)
+ * Universal HTTP Client
+ *
+ * A single, runtime-agnostic HTTP implementation built on top of the standard
+ * `fetch()` API. It works identically across Node.js, Cloudflare Workers,
+ * React Native, Android React Native, browsers, Bun, and Deno.
+ *
+ * It does NOT depend on Axios, Node's `http`/`https` modules, `tough-cookie`,
+ * or any browser/Node/Worker/React-Native specific API.
  */
 
-const axios = require("axios");
 const { DEFAULT_HEADERS } = require("./constants.js");
 
 /* -------------------------------------------------------------------------- */
-/*                               ENV DETECTION                                */
+/*                               FETCH DETECTION                              */
 /* -------------------------------------------------------------------------- */
 
-const isNode =
-  typeof process !== "undefined" &&
-  process.versions != null &&
-  process.versions.node != null;
+if (
+  typeof globalThis === "undefined" ||
+  typeof globalThis.fetch !== "function"
+) {
+  throw new Error("schoolapp requires a runtime with fetch() support.");
+}
+
+const MAX_REDIRECTS = 5;
+const DEFAULT_TIMEOUT = 15000;
 
 /* -------------------------------------------------------------------------- */
-/*                            COOKIE JAR ABSTRACTION                           */
+/*                            SET-COOKIE EXTRACTION                           */
 /* -------------------------------------------------------------------------- */
 
-let CookieJarImpl = null;
+/**
+ * Split a raw `set-cookie` header string (as returned by `Headers.get`) into
+ * individual `Set-Cookie` values. The native `getSetCookie()` path already
+ * returns an array, so this only matters for runtimes that combine multiple
+ * cookies into a single comma-separated header.
+ *
+ * The split avoids breaking inside an `Expires=...` date (which contains a
+ * comma) by only splitting on commas followed by a fresh `name=` token.
+ */
+function splitSetCookieHeader(header) {
+  if (!header || typeof header !== "string") return [];
+  return header.split(/,(?=\s*[^;,=\s]+\s*=)/).map((s) => s.trim()).filter(Boolean);
+}
 
-if (isNode) {
-  // Node.js: use tough-cookie
-  const { CookieJar } = require("tough-cookie");
-  CookieJarImpl = class {
-    constructor() {
-      this.jar = new CookieJar();
-    }
-    async get(url) {
-      return this.jar.getCookieString(url);
-    }
-    async set(url, cookie) {
-      return this.jar.setCookie(cookie, url);
-    }
-    async clear() {
-      return this.jar.removeAllCookies();
-    }
-  };
-} else {
-  // React Native: in-memory cookies (safe for mobile)
-  CookieJarImpl = class {
-    constructor() {
-      this.cookies = {};
-    }
-    async get(url) {
-      const host = new URL(url).origin;
-      return this.cookies[host] || "";
-    }
-    async set(url, cookie) {
-      const host = new URL(url).origin;
-      const [cookieContent] = cookie.split(";");
-      const [name, ...valueParts] = cookieContent.split("=");
-      const key = name.trim();
-      const value = valueParts.join("=").trim();
+/**
+ * Extract `Set-Cookie` headers from a Fetch response in a runtime-safe way.
+ *
+ * Prefer `response.headers.getSetCookie()` (Node 18.17+, Cloudflare Workers,
+ * modern browsers) and fall back to `response.headers.get("set-cookie")`.
+ */
+function getSetCookies(response) {
+  const headers = response && response.headers;
+  if (!headers) return [];
 
-      // Parse existing cookies into a map
-      const existingStr = this.cookies[host] || "";
-      const cookieMap = {};
-      
-      existingStr.split(";").forEach(c => {
-        if (!c.trim()) return;
-        const [cName, ...cValueParts] = c.split("=");
-        if (cName) cookieMap[cName.trim()] = cValueParts.join("=").trim();
-      });
+  if (typeof headers.getSetCookie === "function") {
+    const cookies = headers.getSetCookie();
+    if (Array.isArray(cookies) && cookies.length) return cookies;
+  }
 
-      // Update or add new cookie
-      cookieMap[key] = value;
+  if (typeof headers.get === "function") {
+    return splitSetCookieHeader(headers.get("set-cookie"));
+  }
 
-      // Reconstruct cookie string
-      this.cookies[host] = Object.entries(cookieMap)
-        .map(([k, v]) => `${k}=${v}`)
-        .join("; ");
+  return [];
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 COOKIE JAR                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A portable in-memory cookie jar.
+ *
+ * Fetch does not provide consistent automatic cookie persistence across all
+ * runtimes, so the client maintains its own jar. Cookies are stored per
+ * domain/host and are only ever sent back to a matching origin.
+ */
+class CookieJar {
+  constructor() {
+    // Map<domainOrHost (lowercase), Map<name, record>>
+    this.cookies = new Map();
+  }
+
+  /**
+   * Return the `Cookie` header string for a URL, or an empty string when no
+   * cookies apply.
+   * @param {string} url
+   * @returns {Promise<string>}
+   */
+  async get(url) {
+    const u = new URL(url);
+    const hostname = u.hostname.toLowerCase();
+    const secure = u.protocol === "https:";
+    const path = u.pathname || "/";
+    const now = Date.now();
+
+    const pairs = [];
+
+    for (const byName of this.cookies.values()) {
+      for (const record of byName.values()) {
+        if (record.expires !== null && record.expires <= now) continue;
+
+        if (record.hostOnly) {
+          if (record.domain !== hostname) continue;
+        } else {
+          if (hostname !== record.domain && !hostname.endsWith("." + record.domain)) {
+            continue;
+          }
+        }
+
+        if (!this._pathMatches(path, record.path)) continue;
+        if (record.secure && !secure) continue;
+
+        pairs.push(`${record.name}=${record.value}`);
+      }
     }
-    async clear() {
-      this.cookies = {};
+
+    return pairs.length ? pairs.join("; ") : "";
+  }
+
+  /**
+   * Store a `Set-Cookie` value for the given URL.
+   * @param {string} url
+   * @param {string} cookieHeader
+   * @returns {Promise<void>}
+   */
+  async set(url, cookieHeader) {
+    const record = this._parseSetCookie(url, cookieHeader);
+    if (!record) return;
+
+    let byName = this.cookies.get(record.domain);
+
+    if (record.delete) {
+      if (byName) byName.delete(record.name);
+      return;
     }
-  };
+
+    if (!byName) {
+      byName = new Map();
+      this.cookies.set(record.domain, byName);
+    }
+
+    byName.set(record.name, record);
+  }
+
+  /**
+   * Remove all stored cookies.
+   * @returns {Promise<void>}
+   */
+  async clear() {
+    this.cookies.clear();
+  }
+
+  /* ------------------------------- internals ------------------------------ */
+
+  _pathMatches(requestPath, cookiePath) {
+    if (requestPath === cookiePath) return true;
+    if (!requestPath.startsWith(cookiePath)) return false;
+    if (cookiePath.endsWith("/")) return true;
+    return requestPath.charAt(cookiePath.length) === "/";
+  }
+
+  _defaultPath(u) {
+    const p = u.pathname || "/";
+    if (!p || p[0] !== "/") return "/";
+    const idx = p.lastIndexOf("/");
+    return idx <= 0 ? "/" : p.slice(0, idx);
+  }
+
+  _parseSetCookie(url, header) {
+    if (!header || typeof header !== "string") return null;
+
+    const u = new URL(url);
+    const hostname = u.hostname.toLowerCase();
+
+    const parts = header.split(";");
+    const first = parts[0];
+    const eqIdx = first.indexOf("=");
+
+    let name;
+    let value;
+    if (eqIdx === -1) {
+      name = first.trim();
+      value = "";
+    } else {
+      name = first.slice(0, eqIdx).trim();
+      value = first.slice(eqIdx + 1).trim();
+    }
+    if (!name) return null;
+
+    let domain = hostname;
+    let hostOnly = true;
+    let path = this._defaultPath(u);
+    let secure = false;
+    let maxAge = null;
+    let expiresRaw = null;
+
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (!part) continue;
+
+      const eq = part.indexOf("=");
+      const key = (eq === -1 ? part : part.slice(0, eq)).trim().toLowerCase();
+      const val = eq === -1 ? "" : part.slice(eq + 1).trim();
+
+      switch (key) {
+        case "domain":
+          if (val) {
+            domain = val.replace(/^\./, "").toLowerCase();
+            hostOnly = false;
+          }
+          break;
+        case "path":
+          if (val) path = val;
+          break;
+        case "secure":
+          secure = true;
+          break;
+        case "max-age":
+          maxAge = parseInt(val, 10);
+          break;
+        case "expires":
+          expiresRaw = Date.parse(val);
+          break;
+        default:
+          break;
+      }
+    }
+
+    let expires = null;
+    let shouldDelete = false;
+
+    if (!Number.isNaN(maxAge) && maxAge !== null) {
+      if (maxAge <= 0) {
+        shouldDelete = true;
+      } else {
+        expires = Date.now() + maxAge * 1000;
+      }
+    } else if (expiresRaw !== null && !Number.isNaN(expiresRaw)) {
+      expires = expiresRaw;
+      if (expires <= Date.now()) shouldDelete = true;
+    }
+
+    return {
+      domain,
+      hostOnly,
+      name,
+      value,
+      path,
+      secure,
+      expires,
+      delete: shouldDelete,
+    };
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -85,33 +262,26 @@ if (isNode) {
 let isNetworkReady = null;
 
 /**
- * Inject from React Native:
- * setNetworkChecker(() => netInfo.isInternetReachable === true)
+ * Inject an optional connectivity checker (primarily for React Native):
+ *
+ *   setNetworkChecker(() => netInfo.isInternetReachable === true);
+ *
+ * @param {Function|null} fn
  */
 function setNetworkChecker(fn) {
   isNetworkReady = fn;
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               HTTP CLIENT                                  */
+/*                                HTTP CLIENT                                 */
 /* -------------------------------------------------------------------------- */
 
 class HTTPClient {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
-    this.cookieJar = new CookieJarImpl();
+    this.cookieJar = new CookieJar();
     this.onUnauthorized = null;
-
-    this.client = axios.create({
-      timeout: 15000,
-      headers: {
-        ...DEFAULT_HEADERS,
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      },
-      validateStatus: status => status < 500,
-      maxRedirects: 0, // we handle redirects manually
-    });
+    this.timeout = DEFAULT_TIMEOUT;
   }
 
   setUnauthorizedHandler(handler) {
@@ -122,12 +292,59 @@ class HTTPClient {
     await this.cookieJar.clear();
   }
 
-  /* ------------------------------------------------------------------------ */
-  /*                               CORE REQUEST                                */
-  /* ------------------------------------------------------------------------ */
+  /* ------------------------------- internals ------------------------------ */
 
+  _networkNotReady() {
+    return typeof isNetworkReady === "function" && !isNetworkReady();
+  }
+
+  async _parseBody(response) {
+    const text = await response.text();
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return text;
+      }
+    }
+
+    return text;
+  }
+
+  _detectLogin(currentUrl, data) {
+    if (
+      typeof data !== "string" ||
+      data.length >= 50000 ||
+      currentUrl.includes("/login")
+    ) {
+      return;
+    }
+
+    const lower = data.toLowerCase();
+    if (
+      lower.includes("login-box") ||
+      lower.includes('name="email"') ||
+      lower.includes("sign in")
+    ) {
+      if (this.onUnauthorized) {
+        // A failure inside the handler must never destroy the HTTP response.
+        try {
+          this.onUnauthorized();
+        } catch (e) {
+          /* ignore handler errors */
+        }
+      }
+    }
+  }
+
+  /**
+   * Core transport. Throws meaningful errors on failure.
+   * Returns `{ status, url, data }`.
+   */
   async _request(method, url, data = null, headers = {}) {
-    if (!isNode && isNetworkReady && !isNetworkReady()) {
+    if (this._networkNotReady()) {
       throw new Error("Network not ready");
     }
 
@@ -135,86 +352,109 @@ class HTTPClient {
       ? url
       : new URL(url, this.baseUrl).toString();
 
-    let redirectCount = 0;
-    const MAX_REDIRECTS = 5;
+    let currentMethod = method;
+    let currentData = data;
+    const currentHeaders = { ...headers };
 
-    while (redirectCount <= MAX_REDIRECTS) {
+    let redirectCount = 0;
+
+    while (true) {
+      // Attach cookies from the jar before every hop.
       const cookies = await this.cookieJar.get(currentUrl);
 
-      const config = {
-        method,
-        url: currentUrl,
-        headers: {
-          ...headers,
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-        data,
-        maxRedirects: 0,
+      const requestHeaders = {
+        ...DEFAULT_HEADERS,
+        ...currentHeaders,
+        // Cache prevention via ordinary HTTP headers only (no Fetch `cache`).
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       };
 
-      const response = await this.client.request(config);
-
-      // Save cookies
-      const setCookie = response.headers["set-cookie"];
-      if (setCookie) {
-        const cookiesArr = Array.isArray(setCookie)
-          ? setCookie
-          : [setCookie];
-
-        for (const c of cookiesArr) {
-          await this.cookieJar.set(currentUrl, c);
-        }
+      // The cookie jar takes precedence; a user-supplied Cookie header is
+      // overridden so the session stays consistent across runtimes.
+      if (cookies) {
+        requestHeaders.Cookie = cookies;
       }
 
-      // Handle redirects
-      if (
-        response.status >= 300 &&
-        response.status < 400 &&
-        response.headers.location
-      ) {
+      const controller =
+        typeof AbortController !== "undefined" ? new AbortController() : null;
+
+      let timer = null;
+      if (controller && this.timeout != null && this.timeout > 0) {
+        timer = setTimeout(() => controller.abort(), this.timeout);
+      }
+
+      let response;
+      try {
+        response = await fetch(currentUrl, {
+          method: currentMethod,
+          headers: requestHeaders,
+          body:
+            currentData !== null && currentData !== undefined
+              ? currentData
+              : undefined,
+          redirect: "manual",
+          signal: controller ? controller.signal : undefined,
+        });
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          throw new Error("Request timeout", { cause: e });
+        }
+        throw e;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+
+      // Persist any cookies returned by this hop.
+      const setCookies = getSetCookies(response);
+      for (const cookie of setCookies) {
+        await this.cookieJar.set(currentUrl, cookie);
+      }
+
+      const status = response.status;
+      const location = response.headers.get("location");
+
+      // Manual redirect handling.
+      if (status >= 300 && status < 400 && location) {
         redirectCount++;
 
-        if (!isNode && isNetworkReady && !isNetworkReady()) {
+        if (redirectCount > MAX_REDIRECTS) {
+          throw new Error("Too many redirects");
+        }
+
+        if (this._networkNotReady()) {
           throw new Error("Lost network during redirect");
         }
 
-        currentUrl = new URL(
-          response.headers.location,
-          currentUrl
-        ).toString();
+        currentUrl = new URL(location, currentUrl).toString();
 
-        if ([301, 302, 303].includes(response.status)) {
-          method = "GET";
-          data = null;
-          delete headers["Content-Type"];
+        // 301 / 302 / 303: convert POST (and other non-idempotent methods)
+        // to GET and drop the request body.
+        if ([301, 302, 303].includes(status)) {
+          if (currentMethod !== "GET" && currentMethod !== "HEAD") {
+            currentMethod = "GET";
+            currentData = null;
+            delete currentHeaders["Content-Type"];
+          }
         }
+        // 307 / 308: preserve method and body.
 
         continue;
       }
 
-      // Optimized detection: check if response contains common login page markers
-      if (
-        typeof response.data === "string" &&
-        response.data.length < 50000 && // Assume huge pages (>50k) aren't simple login pages
-        !currentUrl.includes("/login")
-      ) {
-        const data = response.data.toLowerCase();
-        if (data.includes("login-box") || data.includes('name="email"') || data.includes("sign in")) {
-          if (this.onUnauthorized) {
-            this.onUnauthorized();
-          }
-        }
-      }
+      const data = await this._parseBody(response);
 
-      return response;
+      this._detectLogin(currentUrl, data);
+
+      return {
+        status,
+        url: currentUrl,
+        data,
+      };
     }
-
-    throw new Error("Too many redirects");
   }
 
-  /* ------------------------------------------------------------------------ */
-  /*                                   GET                                    */
-  /* ------------------------------------------------------------------------ */
+  /* --------------------------------- GET ---------------------------------- */
 
   async get(url, params = null) {
     try {
@@ -224,11 +464,11 @@ class HTTPClient {
         const u = new URL(
           url.startsWith("http") ? url : new URL(url, this.baseUrl)
         );
-        Object.entries(params).forEach(([k, v]) => {
+        for (const [k, v] of Object.entries(params)) {
           if (v !== null && v !== undefined) {
             u.searchParams.append(k, v);
           }
-        });
+        }
         finalUrl = u.toString();
       }
 
@@ -236,7 +476,7 @@ class HTTPClient {
 
       return {
         code: res.status,
-        url: res.request?.responseURL || res.config.url,
+        url: res.url,
         content: res.data,
       };
     } catch (e) {
@@ -244,9 +484,7 @@ class HTTPClient {
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /*                                   POST                                   */
-  /* ------------------------------------------------------------------------ */
+  /* --------------------------------- POST --------------------------------- */
 
   async post(url, data, referer = null) {
     try {
@@ -263,7 +501,7 @@ class HTTPClient {
 
       return {
         code: res.status,
-        url: res.request?.responseURL || res.config.url,
+        url: res.url,
         content: res.data,
       };
     } catch (e) {
@@ -272,4 +510,4 @@ class HTTPClient {
   }
 }
 
-module.exports = { setNetworkChecker, HTTPClient };
+module.exports = { HTTPClient, CookieJar, setNetworkChecker, getSetCookies };
